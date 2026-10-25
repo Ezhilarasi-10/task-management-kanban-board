@@ -1,0 +1,109 @@
+name: CI & Docker Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # ============================================================================
+  # 1. Backend Automated Testing
+  # ============================================================================
+  backend-test:
+    name: Backend API Integration Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies (npm ci)
+        working-directory: backend
+        run: npm ci
+
+      - name: Run backend REST API test suite
+        working-directory: backend
+        run: npm test
+
+  # ============================================================================
+  # 2. Frontend Component Tests & Type Check Build
+  # ============================================================================
+  frontend-test-and-build:
+    name: Frontend Component Tests & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies (npm ci)
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run frontend unit & component tests (Vitest)
+        working-directory: frontend
+        run: npm test
+
+      - name: Run TypeScript type check and production build
+        working-directory: frontend
+        run: npm run build
+
+  # ============================================================================
+  # 3. Docker Container Build & GHCR Publishing
+  # ============================================================================
+  docker-build-and-push:
+    name: Docker Build & Publish to GHCR
+    needs: [backend-test, frontend-test-and-build]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

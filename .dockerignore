@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Build artifacts
+dist/
+*/dist/
+
+# SQLite databases & temp journals
+*.db
+*.db-journal
+*.sqlite
+backend/tasks.db
+backend/tasks.db-journal
+
+# Logs
+*.log
+npm-debug.log*
+
+# Git and OS
+.git/
+.github/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
